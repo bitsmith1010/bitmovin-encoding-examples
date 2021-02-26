@@ -1,0 +1,5 @@
+target
+encode-p1.iml
+application_private.properties
+/src/main/resources/META-INF/application_private.properties
+.idea
