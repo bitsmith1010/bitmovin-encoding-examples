@@ -29,7 +29,9 @@ import com.bitmovin.api.sdk.model.StreamMode;
 import com.bitmovin.api.sdk.model.StreamSelectionMode;
 import com.bitmovin.api.sdk.model.Task;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -40,7 +42,7 @@ import java.util.Properties;
  *
  */
 public class App {
-  public void main() throws java.io.IOException, java.lang.InterruptedException
+  public void main() throws IOException, InterruptedException
   {
     Properties config = new Properties();
     InputStream configFile = getClass().getResourceAsStream(
@@ -62,82 +64,96 @@ public class App {
 //            config.getProperty("input_bucket_name"), bitmovinApi);
 //    System.out.println(gcsInput.getId());
 
-    GcsInput gcsInput = bitmovinApi.encoding
-            .inputs.gcs.get(config.getProperty("input_resource_id"));
-    System.out.println("in id: " + gcsInput.getId());
+//    GcsInput gcsInput = bitmovinApi.encoding
+//            .inputs.gcs.get(config.getProperty("input_resource_id"));
+//    System.out.println("in id: " + gcsInput.getId());
+    String gcsInId = config.getProperty("input_resource_id");
 
 //    GcsOutput gcsOutput = createGcsOutput("resource-out-1",
 //            config.getProperty("gcs_output_access"),
 //            config.getProperty("gcs_output_secret"),
 //            config.getProperty("output_bucket_name"), bitmovinApi);
-//    System.out.println(gcsOutput.getId());
+//    System.out.println(gcsOutId);
 
-    GcsOutput gcsOutput = bitmovinApi.encoding.outputs
-            .gcs.get(config.getProperty("output_resource_id"));
-    System.out.println("out id: " + gcsOutput.getId());
+//    GcsOutput gcsOutput = bitmovinApi.encoding.outputs
+//            .gcs.get(config.getProperty("output_resource_id"));
+//    System.out.println("out id: " + gcsOutId);
+    String gcsOutId = config.getProperty("output_resource_id");
 
-    Encoding encoding = createEncoding("encoding-per-title", bitmovinApi);
-    System.out.println("encoding id: " + encoding.getId());
+    //String encodingId = config.getProperty("encoding_id");
 
-    StreamInput videoStreamInput = createStreamInput(
+    String encodingId = createEncoding("encoding-per-title", bitmovinApi);
+    System.out.println("encoding id: " + encodingId);
+
+    StreamInput h264StreamInput = createStreamInput(
             config.getProperty("input_path"), config.getProperty("input_resource_id"));
-    StreamInput audioStreamInput = createStreamInput(
+    StreamInput aacStreamInput = createStreamInput(
             config.getProperty("input_path"), config.getProperty("input_resource_id"));
-    System.out.println("input to video stream: " + videoStreamInput.getInputId());
-    System.out.println("input to audio stream: " + audioStreamInput.getInputId());
+    System.out.println("input to video stream: " + h264StreamInput.getInputId());
+    System.out.println("input to audio stream: " + aacStreamInput.getInputId());
 
-    H264VideoConfiguration h264Configuration = createH264Configuration(
+    String h264ConfigurationId = createH264Configuration(
             "h264-1",
             Integer.parseInt(config.getProperty("h264_1_width")),
             Long.parseLong(config.getProperty("h264_1_bitrate")), bitmovinApi);
+    System.out.println("video config id: " + h264ConfigurationId);
 
-    System.out.println("video config id: " + h264Configuration.getId());
-
-    AacAudioConfiguration aacConfiguration = createAacConfiguration(
+    String aacConfigurationId = createAacConfiguration(
             "aac-1",
             Long.parseLong(config.getProperty("aac_1_bitrate")), bitmovinApi);
+    System.out.println("audio config id: " + aacConfigurationId);
 
-    System.out.println("audio config id: " + aacConfiguration.getId());
+    String aacStreamId = createAacStream(encodingId, aacStreamInput,
+            aacConfigurationId, bitmovinApi);
+    System.out.println("audio stream id: " + aacStreamId);
 
-    Stream audioStream = createAacStream(encoding.getId(), audioStreamInput,
-            aacConfiguration.getId(), bitmovinApi);
-    System.out.println("audio stream id: " + audioStream.getId());
+    String h264StreamId = createH264Stream(encodingId, h264StreamInput,
+            h264ConfigurationId, bitmovinApi);
+    System.out.println("video stream id: " + h264StreamId);
 
-    Stream videoStream = createH264Stream(encoding.getId(), videoStreamInput,
-            h264Configuration.getId(), bitmovinApi);
-    System.out.println("video stream id: " + videoStream.getId());
+    // domain/bucket_name/encoding_tests/myprobe + /DATE
+    String rootPath = Paths.get(config.getProperty("output_path"),
+            new Date().toString().replace(" ", "_")).toString();
+    String perTitleTemplate =  "{width}_{bitrate}_{uuid}";
 
-    EncodingOutput fmp4H264Out = createFmp4Muxing(encoding.getId(), gcsOutput.getId(),
-            config.getProperty("output_path") +
-                    new Date().toString().replace(" ", "_"),
-            "h264", videoStream.getId(), "", bitmovinApi);
+    EncodingOutput fmp4H264Out = createEncodingOutput(
+            gcsOutId, rootPath, "h264", perTitleTemplate, "fmp4");
     System.out.println("fmp4 h264 output: " + fmp4H264Out.toString());
 
-    EncodingOutput fmp4AacOut = createFmp4Muxing(encoding.getId(), gcsOutput.getId(),
-            config.getProperty("output_path") +
-                    new Date().toString().replace(" ", "_"),
-            "aac", audioStream.getId(), "", bitmovinApi);
-    System.out.println("mp4 encoding output: " + fmp4AacOut.toString());
+    EncodingOutput fmp4AacOut = createEncodingOutput(
+            gcsOutId, rootPath, "aac", perTitleTemplate, "fmp4");
+    System.out.println("fmp4 aac output: " + fmp4AacOut.toString());
+
+    String fmp4H264Id = createFmp4Muxing(
+            encodingId, fmp4H264Out, h264StreamId, "", bitmovinApi);
+    System.out.println("fmp4 h264 encoding output: " + fmp4H264Id);
+
+    String fmp4AacId = createFmp4Muxing(
+            encodingId, fmp4AacOut, aacStreamId, "", bitmovinApi);
+    System.out.println("fmp4 aac encoding output: " + fmp4AacId);
 
 //
-//    createFmp4Muxing(encoding.getId(), gcsOutput.getId(),
+//    createFmp4Muxing(encoding.getId(), gcsOutId,
 //            config.getProperty("output_path") +
 //                    new Date().toString().replace(" ", "_"),
 //            audioStream.getId(), audioStream, bitmovinApi);
 
-//    createMp4Muxing(encoding.getId(), gcsOutput.getId(),
+//    createMp4Muxing(encoding.getId(), gcsOutId,
 //            config.getProperty("output_path") +
 //                    new Date().toString().replace(" ", "_"),
 //            videoStream.getId(), "", bitmovinApi);
 
-//    EncodingOutput mp4Out = createMp4Muxing(encoding.getId(), gcsOutput.getId(),
+//    EncodingOutput mp4Out = createMp4Muxing(encoding.getId(), gcsOutId,
 //            config.getProperty("output_path") +
 //                    new Date().toString().replace(" ", "_"),
 //            videoStream.getId(), audioStream.getId(), bitmovinApi);
 
-    startEncoding(encoding.getId(), bitmovinApi);
-    awaitEncoding(encoding.getId(), bitmovinApi);
-    createDashManifestDefault(encoding.getId(), fmp4AacOut, fmp4H264Out, bitmovinApi);
+    startEncoding(encodingId, bitmovinApi);
+    awaitEncoding(encodingId, bitmovinApi);
+
+    EncodingOutput manifestOut = createEncodingOutput(gcsOutId, rootPath);
+    String manifestId = createDashManifestDefault(encodingId, manifestOut, bitmovinApi);
+    System.out.println("manifest id: " + manifestId);
 
     //#endmain
   }
@@ -169,15 +185,15 @@ public class App {
     return bitmovinApi.encoding.outputs.gcs.create(output);
   }
 
-  public static Encoding createEncoding(String name, BitmovinApi bitmovinApi) {
+  public static String createEncoding(String name, BitmovinApi bitmovinApi) {
     Encoding encoding = new Encoding();
     encoding.setName(name);
     encoding.setCloudRegion(CloudRegion.AUTO);
-    return bitmovinApi.encoding.encodings.create(encoding);
+    return bitmovinApi.encoding.encodings.create(encoding).getId();
   }
 
-  //#VIDEO-CONFIG
-  public static H264VideoConfiguration createH264Configuration(
+  //#codecconfig
+  public static String createH264Configuration(
           String name, int width, long bitrate, BitmovinApi bitmovinApi) {
     H264VideoConfiguration videoCodecConfiguration = new H264VideoConfiguration();
     videoCodecConfiguration.setName(name);
@@ -186,17 +202,18 @@ public class App {
 //    videoCodecConfiguration.setWidth(1024);
     videoCodecConfiguration.setPresetConfiguration(PresetConfiguration.VOD_STANDARD);
 
-    return bitmovinApi.encoding.configurations.video.h264.create(videoCodecConfiguration);
+    return bitmovinApi.encoding
+            .configurations.video.h264.create(videoCodecConfiguration).getId();
   }
 
-  public static AacAudioConfiguration createAacConfiguration(
+  public static String createAacConfiguration(
           String name, long bitrate, BitmovinApi bitmovinApi) {
     AacAudioConfiguration audioCodecConfiguration = new AacAudioConfiguration();
     audioCodecConfiguration.setName(name);
     audioCodecConfiguration.setBitrate(bitrate);
 
     return bitmovinApi.encoding.configurations
-            .audio.aac.create(audioCodecConfiguration);
+            .audio.aac.create(audioCodecConfiguration).getId();
   }
 
   public static StreamInput createStreamInput(String path, String resourceId) {
@@ -207,45 +224,66 @@ public class App {
     return streamInput;
   }
 
-  public static Stream createAacStream(String encodingId, StreamInput streamInput,
+  //#streamcreate
+  public static String createAacStream(String encodingId, StreamInput streamInput,
                                           String configId,
                                           BitmovinApi bitmovinApi) {
     Stream stream = new Stream();
     stream.setCodecConfigId(configId);
     stream.addInputStreamsItem(streamInput);
     stream = bitmovinApi.encoding.encodings.streams.create(encodingId, stream);
-    return stream;
+    return stream.getId();
   }
 
-  public static Stream createH264Stream(String encodingId,
-                                              StreamInput streamInput,
-                                              String configurationId, BitmovinApi bitmovinApi)
+  public static String createH264Stream(String encodingId,
+                                        StreamInput streamInput,
+                                        String configurationId,
+                                        BitmovinApi bitmovinApi)
   {
     Stream stream = new Stream();
     stream.setCodecConfigId(configurationId);
     stream.addInputStreamsItem(streamInput);
     stream.setMode(StreamMode.PER_TITLE_TEMPLATE);
-    return bitmovinApi.encoding.encodings.streams.create(encodingId, stream);
+    return bitmovinApi.encoding.encodings.streams.create(encodingId, stream).getId();
   }
 
-  //#MUXING
-  public static EncodingOutput createFmp4Muxing(String encodingId,
-                                                String resourceId, String basePath,
-                                      String codecName,
-                                      String videoStreamId, String audioStreamId,
-                                      BitmovinApi bitmovinApi)
+  public enum createEncodingOutputVariableParameterIndex
+    {CODEC, PER_TITLE_TEMPLATE, CONTAINER_FORMAT}
+  public static EncodingOutput createEncodingOutput(
+          String resourceId, String rootPath, String... pathComponents)
   {
     AclEntry aclEntry = new AclEntry();
     aclEntry.setPermission(AclPermission.PUBLIC_READ);
     List<AclEntry> aclEntryList = new ArrayList<AclEntry>();
     aclEntryList.add(aclEntry);
 
-    EncodingOutput fmp4Output = new EncodingOutput();
-    fmp4Output.setAcl(aclEntryList);
-    fmp4Output.setOutputId(resourceId);
-    fmp4Output.setOutputPath(String.format(
-            "%s/%s_{width}_{bitrate}_{uuid}/fmp4", basePath, codecName));
+    EncodingOutput out = new EncodingOutput();
+    out.setAcl(aclEntryList);
+    out.setOutputId(resourceId);
+    if( pathComponents.length > 0 ) {
+      out.setOutputPath(Paths.get(
+              rootPath,
+              pathComponents[
+                      createEncodingOutputVariableParameterIndex
+                              .CODEC.ordinal()] + "_" + pathComponents[
+                              createEncodingOutputVariableParameterIndex
+                                      .PER_TITLE_TEMPLATE.ordinal()],
+              pathComponents[createEncodingOutputVariableParameterIndex
+                      .CONTAINER_FORMAT.ordinal()]
+      ).toString());
+    }
+    else out.setOutputPath( rootPath );
 
+    return out;
+  }
+
+
+  //#muxing
+  public static String createFmp4Muxing(String encodingId,
+                                                EncodingOutput fmp4Output,
+                                      String videoStreamId, String audioStreamId,
+                                      BitmovinApi bitmovinApi)
+  {
     Fmp4Muxing fmp4Muxing = new Fmp4Muxing();
 
     MuxingStream conf1 = new MuxingStream();
@@ -259,55 +297,11 @@ public class App {
 
     fmp4Muxing.addOutputsItem(fmp4Output);
     bitmovinApi.encoding.encodings.muxings.fmp4.create(encodingId, fmp4Muxing);
-    return fmp4Output;
+    return fmp4Muxing.getId();
     //bitmovinApi.encoding.muxing.addMp4MuxingToEncoding(encoding, fmp4Muxing);
 }
 
-  public static EncodingOutput createMp4Muxing(String encodingId, String resourceId,
-                                               String basePath,
-                                       String videoStreamId, String audioStreamId,
-                                       BitmovinApi bitmovinApi)
-  {
-    AclEntry aclEntry = new AclEntry();
-    aclEntry.setPermission(AclPermission.PUBLIC_READ);
-    List<AclEntry> aclEntryList = new ArrayList<AclEntry>();
-    aclEntryList.add(aclEntry);
-
-    EncodingOutput mp4EncodingOutput = new EncodingOutput();
-    mp4EncodingOutput.setAcl(aclEntryList);
-    mp4EncodingOutput.setOutputId(resourceId);
-    mp4EncodingOutput.setOutputPath(String.format(
-            "%s{width}_{bitrate}_{uuid}/mp4", basePath));
-
-    Mp4Muxing mp4Muxing = new Mp4Muxing();
-    MuxingStream conf1 = new MuxingStream();
-//    MuxingStream conf2 = new MuxingStream();
-
-    conf1.setStreamId(videoStreamId);
-//    conf2.setStreamId(audioStreamId);
-
-    mp4Muxing.addStreamsItem(conf1);
-//    mp4Muxing.addStreamsItem(conf2);
-    mp4Muxing.setFilename("per_title_mp4.mp4");
-
-
-//    fmp4Muxing.addStreamsItem(new MuxingStream().setStreamId(videoStreamId));
-//    fmp4Muxing.addStreamsItem(new MuxingStream().setStreamId(audioStreamId));
-
-//    fmp4Muxing.setStreams(
-//            Arrays.asList(
-//                    new MuxingStream(videoStream.getId()),
-//                    new MuxingStream(audioStream.getId())
-//            )
-//    );
-//    fmp4Muxing.set .setFilename("per_title_mp4.mp4");
-    mp4Muxing.addOutputsItem(mp4EncodingOutput);
-    bitmovinApi.encoding.encodings.muxings.mp4.create(encodingId, mp4Muxing);
-    //bitmovinApi.encoding.muxing.addMp4MuxingToEncoding(encoding, mp4Muxing);
-    return mp4EncodingOutput;
-  }
-
-  //#ENCODING-OUTPUT
+    //#encoding-start
   public static void startEncoding(String encodingId, BitmovinApi bitmovinApi)
   {
     AutoRepresentation autoRepresentation = new AutoRepresentation();
@@ -326,7 +320,7 @@ public class App {
   }
 
   public void awaitEncoding( String encodingId, BitmovinApi bitmovinApi )
-          throws java.lang.InterruptedException
+          throws InterruptedException
   {
 
     Task status;
@@ -346,19 +340,26 @@ public class App {
 
   }
 
-  public void createDashManifestDefault(String encodingId, EncodingOutput encodingOutput1,
-          EncodingOutput encodingOutput2, BitmovinApi bitmovinApi)
+  //#manifest
+  public String createDashManifestDefault(
+          String encodingId, EncodingOutput out, BitmovinApi bitmovinApi)
   {
     DashManifestDefault manifest = new DashManifestDefault();
+
+    manifest.addOutputsItem(out);
     manifest.setEncodingId(encodingId);
     manifest.setManifestName("manifest.mpd");
     manifest.setVersion(DashManifestDefaultVersion.V1);
 //    dashManifestDefault.addOutputsItem(buildEncodingOutput(output, outputPath));
-    manifest.addOutputsItem(encodingOutput1);
-    manifest.addOutputsItem(encodingOutput2);
+//    manifest.addOutputsItem(encodingOutput1);
+//    manifest.addOutputsItem(encodingOutput2);
     manifest = bitmovinApi.encoding.manifests.dash.defaultapi.create(manifest);
 //  executeDashManifestCreation(dashManifestDefault);
     bitmovinApi.encoding.manifests.dash.start(manifest.getId());
+    return manifest.getId();
   }
 
-}
+
+
+
+  }

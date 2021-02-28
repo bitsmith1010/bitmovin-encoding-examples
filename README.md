@@ -1,6 +1,6 @@
 ## bitmovin encoding sdk examples
 
-#### per title encoding (branch per-title-encoding-demo)
+#### per title encoding (branch per-title-encoding)
 
 1. enter missing information in
    `/src/main/resources/META-INF/application_private.properties`
