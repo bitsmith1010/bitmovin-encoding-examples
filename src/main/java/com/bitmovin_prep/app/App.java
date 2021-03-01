@@ -20,7 +20,7 @@ import com.bitmovin.api.sdk.model.H264VideoConfiguration;
 import com.bitmovin.api.sdk.model.MuxingStream;
 import com.bitmovin.api.sdk.model.PerTitle;
 import com.bitmovin.api.sdk.model.PresetConfiguration;
-import com.bitmovin.api.sdk.model.ProfileH264;
+//import com.bitmovin.api.sdk.model.ProfileH264;
 import com.bitmovin.api.sdk.model.StartEncodingRequest;
 import com.bitmovin.api.sdk.model.Status;
 import com.bitmovin.api.sdk.model.Stream;
@@ -50,6 +50,8 @@ public class App {
             "/META-INF/application_private.properties");
     config.load(configFile);
     configFile.close();
+
+    System.out.printf("cofiguration file: %s\n", config.toString());
 
     BitmovinApi bitmovinApi = createBitmovinApi(config.getProperty("api_key"));
     System.out.println(bitmovinApi.toString());
@@ -86,7 +88,7 @@ public class App {
     String h264ConfigurationId = createH264Configuration(
             "h264-1",
             Integer.parseInt(config.getProperty("h264_1_width")),
-            Long.parseLong(config.getProperty("h264_1_bitrate")), bitmovinApi);
+            bitmovinApi);
     System.out.println("video config id: " + h264ConfigurationId);
 
     String aacConfigurationId = createAacConfiguration(
@@ -102,7 +104,7 @@ public class App {
             h264ConfigurationId, bitmovinApi);
     System.out.println("video stream id: " + h264StreamId);
 
-    // domain/bucket_name/encoding_tests/myprobe + /DATE
+    // rootPath format: domain/bucket_name/encoding_tests/myprobe + /DATE
     String rootPath = Paths.get(config.getProperty("output_path"),
             new Date().toString().replace(" ", "_")).toString();
 
@@ -130,12 +132,12 @@ public class App {
     //#endmain
   }
 
-  public static BitmovinApi createBitmovinApi(String key) {
+  private static BitmovinApi createBitmovinApi(String key) {
     return BitmovinApi.builder()
             .withApiKey(key).build();
   }
 
-  public static GcsInput createGcsInput(String name, String access, String secret,
+  private static GcsInput createGcsInput(String name, String access, String secret,
                                         String bucketName, BitmovinApi bitmovinApi) {
     GcsInput input = new GcsInput();
     input.setName(name);
@@ -146,7 +148,7 @@ public class App {
     return bitmovinApi.encoding.inputs.gcs.create(input);
   }
 
-  public static GcsOutput createGcsOutput(String name, String access, String secret,
+  private static GcsOutput createGcsOutput(String name, String access, String secret,
                                           String bucketName, BitmovinApi bitmovinApi) {
     GcsOutput output = new GcsOutput();
     output.setName(name);
@@ -157,7 +159,7 @@ public class App {
     return bitmovinApi.encoding.outputs.gcs.create(output);
   }
 
-  public static String createEncoding(String name, BitmovinApi bitmovinApi) {
+  private static String createEncoding(String name, BitmovinApi bitmovinApi) {
     Encoding encoding = new Encoding();
     encoding.setName(name);
     encoding.setCloudRegion(CloudRegion.AUTO);
@@ -165,20 +167,20 @@ public class App {
   }
 
   //#codecconfig
-  public static String createH264Configuration(
-          String name, int width, long bitrate, BitmovinApi bitmovinApi) {
-    H264VideoConfiguration videoCodecConfiguration = new H264VideoConfiguration();
-    videoCodecConfiguration.setName(name);
-    videoCodecConfiguration.setProfile(ProfileH264.HIGH);
-//    videoCodecConfiguration.setBitrate(1500000L);
-//    videoCodecConfiguration.setWidth(1024);
-    videoCodecConfiguration.setPresetConfiguration(PresetConfiguration.VOD_STANDARD);
+  private static String createH264Configuration(
+          String name, int width, BitmovinApi bitmovinApi) {
+    H264VideoConfiguration configuration = new H264VideoConfiguration();
+    configuration.setName(name);
+//    videoCodecConfiguration.setProfile(ProfileH264.HIGH);
+    // as it appears, it's possible to set a target resolution
+    configuration.setWidth(1024);
+    configuration.setPresetConfiguration(PresetConfiguration.VOD_STANDARD);
 
     return bitmovinApi.encoding
-            .configurations.video.h264.create(videoCodecConfiguration).getId();
+            .configurations.video.h264.create(configuration).getId();
   }
 
-  public static String createAacConfiguration(
+  private static String createAacConfiguration(
           String name, long bitrate, BitmovinApi bitmovinApi) {
     AacAudioConfiguration audioCodecConfiguration = new AacAudioConfiguration();
     audioCodecConfiguration.setName(name);
@@ -188,7 +190,7 @@ public class App {
             .audio.aac.create(audioCodecConfiguration).getId();
   }
 
-  public static StreamInput createStreamInput(String path, String resourceId) {
+  private static StreamInput createStreamInput(String path, String resourceId) {
     StreamInput streamInput = new StreamInput();
     streamInput.setSelectionMode(StreamSelectionMode.AUTO);
     streamInput.setInputPath(path);
@@ -197,7 +199,7 @@ public class App {
   }
 
   //#streamcreate
-  public static String createAacStream(String encodingId, StreamInput streamInput,
+  private static String createAacStream(String encodingId, StreamInput streamInput,
                                           String configId, BitmovinApi bitmovinApi) {
     Stream stream = new Stream();
     stream.setCodecConfigId(configId);
@@ -206,7 +208,7 @@ public class App {
     return stream.getId();
   }
 
-  public static String createH264Stream(String encodingId, StreamInput streamInput,
+  private static String createH264Stream(String encodingId, StreamInput streamInput,
                                         String configurationId, BitmovinApi bitmovinApi)
   {
     Stream stream = new Stream();
@@ -216,9 +218,9 @@ public class App {
     return bitmovinApi.encoding.encodings.streams.create(encodingId, stream).getId();
   }
 
-  public enum createEncodingOutputVariableParameterIndex
+  private enum createEncodingOutputVariableParameterIndex
     {CODEC, PER_TITLE_TEMPLATE, CONTAINER_FORMAT}
-  public static EncodingOutput createEncodingOutput(
+  private static EncodingOutput createEncodingOutput(
           String resourceId, String rootPath, String... pathComponents)
   {
     AclEntry aclEntry = new AclEntry();
@@ -247,7 +249,7 @@ public class App {
   }
 
   //#muxing
-  public static String createFmp4Muxing(String encodingId,
+  private static String createFmp4Muxing(String encodingId,
                                                 EncodingOutput fmp4Output,
                                       String streamId, BitmovinApi bitmovinApi)
   {
@@ -262,10 +264,9 @@ public class App {
     fmp4Muxing.addOutputsItem(fmp4Output);
     bitmovinApi.encoding.encodings.muxings.fmp4.create(encodingId, fmp4Muxing);
     return fmp4Muxing.getId();
-}
+  }
 
-    //#encoding-start
-  public static void startEncoding(String encodingId, BitmovinApi bitmovinApi)
+  private static PerTitle createPerTitle()
   {
     AutoRepresentation autoRepresentation = new AutoRepresentation();
 
@@ -275,14 +276,23 @@ public class App {
     PerTitle perTitle = new PerTitle();
     perTitle.setH264Configuration(h264PerTitleConfiguration);
 
+    return perTitle;
+  }
+
+    //#encoding-start
+  private static void startEncoding(String encodingId, BitmovinApi bitmovinApi)
+  {
+
     StartEncodingRequest startEncodingRequest = new StartEncodingRequest();
-    startEncodingRequest.setPerTitle(perTitle);
-//    startEncodingRequest.setEncodingMode(EncodingMode.SINGLE_PASS);
+    startEncodingRequest.setPerTitle(createPerTitle());
+
+    // this is suggested in the guide and example. Here an error resulted.
+    // startEncodingRequest.setEncodingMode(EncodingMode.SINGLE_PASS);
 
     bitmovinApi.encoding.encodings.start(encodingId, startEncodingRequest);
   }
 
-  public void awaitEncoding( String encodingId, BitmovinApi bitmovinApi )
+  private void awaitEncoding( String encodingId, BitmovinApi bitmovinApi )
           throws InterruptedException
   {
 
@@ -304,7 +314,7 @@ public class App {
   }
 
   //#manifest
-  public static String createDashManifestDefault(
+  private static String createDashManifestDefault(
           String name, String encodingId, EncodingOutput out, BitmovinApi bitmovinApi)
   {
     DashManifestDefault manifest = new DashManifestDefault();

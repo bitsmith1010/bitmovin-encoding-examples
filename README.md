@@ -8,4 +8,3 @@
 
 2. build with maven and run package
 
-- note: some bugs remain in order that it runs
