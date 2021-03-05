@@ -14,13 +14,14 @@ import com.bitmovin.api.sdk.model.DashManifestDefaultVersion;
 import com.bitmovin.api.sdk.model.Encoding;
 import com.bitmovin.api.sdk.model.EncodingOutput;
 import com.bitmovin.api.sdk.model.Fmp4Muxing;
-import com.bitmovin.api.sdk.model.GcsInput;
 import com.bitmovin.api.sdk.model.GcsOutput;
 import com.bitmovin.api.sdk.model.H264VideoConfiguration;
+import com.bitmovin.api.sdk.model.HlsManifestDefault;
+import com.bitmovin.api.sdk.model.HlsManifestDefaultVersion;
 import com.bitmovin.api.sdk.model.LiveDashManifest;
+import com.bitmovin.api.sdk.model.LiveHlsManifest;
 import com.bitmovin.api.sdk.model.MuxingStream;
 import com.bitmovin.api.sdk.model.PresetConfiguration;
-//import com.bitmovin.api.sdk.model.ProfileH264;
 import com.bitmovin.api.sdk.model.StartLiveEncodingRequest;
 import com.bitmovin.api.sdk.model.Status;
 import com.bitmovin.api.sdk.model.Stream;
@@ -33,14 +34,12 @@ import feign.slf4j.Slf4jLogger;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.Properties;
 
 public class LiveEncoding {
-private static final java.util.logging.Logger logger =
-        java.util.logging.Logger.getLogger(LiveEncoding.class.getName());
+  private static final java.util.logging.Logger logger =
+          java.util.logging.Logger.getLogger(LiveEncoding.class.getName());
 
   private static BitmovinApi bitmovinApi;
 
@@ -65,6 +64,13 @@ private static final java.util.logging.Logger logger =
                     .getId();
     logger.info("out id: " + gcsOutId);
 
+    String encodingId = createEncoding("encoding-per-title");
+    logger.info("encoding id: " + encodingId);
+
+
+    // --------- renditions cofiguration ----------------
+    //-----------------------------------------
+
     String h264ConfigurationId =
             ! config.getProperty("h264_config_1_id").equals("") ?
                     config.getProperty("h264_config_1_id") :
@@ -84,55 +90,77 @@ private static final java.util.logging.Logger logger =
                     );
     logger.info("audio config id: " + aacConfigurationId);
 
-    String encodingId = createEncoding("encoding-per-title");
-          logger.info("encoding id: " + encodingId);
 
-          StreamInput h264StreamInput = createStreamInput(
-                  config.getProperty("input_path"), inRtmpId);
-          logger.info("input to video stream: " + h264StreamInput.getInputId());
+    // --------- streams ----------------
+    //-----------------------------------------
 
-          StreamInput aacStreamInput = createStreamInput(
-                  config.getProperty("input_path"), inRtmpId);
-          logger.info("input to audio stream: " + aacStreamInput.getInputId());
+    StreamInput h264StreamInput = createStreamRtmpInput(inRtmpId);
+    logger.info("input to video stream: " + h264StreamInput);
 
-          String aacStreamId = createAacStream(encodingId, aacStreamInput,
-                  aacConfigurationId);
-          logger.info("audio stream id: " + aacStreamId);
+    StreamInput aacStreamInput = createStreamRtmpInput(inRtmpId);
+    logger.info("input to audio stream: " + aacStreamInput);
 
-          String h264StreamId = createH264Stream(encodingId, h264StreamInput,
-                  h264ConfigurationId);
-          logger.info("video stream id: " + h264StreamId);
+    String h264StreamId = createH264Stream(encodingId, h264StreamInput,
+            h264ConfigurationId);
+    logger.info("video stream id: " + h264StreamId);
 
-          // rootPath format: domain/bucket_name/encoding_tests/myprobe/DATE
-          String rootPath = Paths.get(config.getProperty("output_path"),
-                  new Date().toString().replace(" ", "_")).toString();
+//    String aacStreamId = createAacStream(encodingId, aacStreamInput,
+//            aacConfigurationId);
+//    logger.info("audio stream id: " + aacStreamId);
 
-          EncodingOutput fmp4H264Out = createEncodingOutput(
-                  gcsOutId, rootPath, "h264",
-                  "480px_800000bps", "fmp4");
-          logger.info("fmp4 h264 output: " + fmp4H264Out);
 
-          EncodingOutput fmp4AacOut = createEncodingOutput(
-                  gcsOutId, rootPath, "aac",
-                  config.getProperty("aac_1_bitrate"), "fmp4");
-          logger.info("fmp4 aac output: " + fmp4AacOut);
+    // --------- muxings ----------------
+    //-----------------------------------------
 
-          createFmp4Muxing(encodingId, fmp4H264Out, h264StreamId);
+    // rootPath format: domain/bucket_name/encoding_tests/myprobe/DATE
+    String rootPath = Paths.get(config.getProperty("output_path"),
+            new Date().toString().replace(" ", "_")).toString();
 
-          createFmp4Muxing(encodingId, fmp4AacOut, aacStreamId);
+    EncodingOutput fmp4H264Out = createEncodingOutput(
+            gcsOutId, rootPath, "h264",
+            config.getProperty("h264_1_height") + "_" +
+                    config.getProperty("h264_1_bitrate"), "fmp4");
+    logger.info("fmp4 h264 output: " + fmp4H264Out);
 
-      EncodingOutput manifestOut = createEncodingOutput(gcsOutId, rootPath);
-      logger.info("manifest output: " + manifestOut);
+    EncodingOutput fmp4AacOut = createEncodingOutput(
+            gcsOutId, rootPath, "aac",
+            config.getProperty("aac_1_bitrate"), "fmp4");
+    logger.info("fmp4 aac output: " + fmp4AacOut);
 
-      String manifestId = createDashManifestDefault("manifest.mpd",
-              encodingId, manifestOut);
-      logger.info("manifest id: " + manifestId);
+    createFmp4Muxing(encodingId, fmp4H264Out, h264StreamId);
 
-      LiveDashManifest liveDashManifestId = createLiveDashManifest(manifestId,
-              90D, 300D);
+//    createFmp4Muxing(encodingId, fmp4AacOut, aacStreamId);
 
-      startEncoding(encodingId, liveDashManifestId,
-              config.getProperty("live_key"));
+
+    // --------- manifests ----------------
+    //-----------------------------------------
+
+    EncodingOutput dashOut = createEncodingOutput(gcsOutId, rootPath);
+    logger.info("manifest output: " + dashOut);
+
+    String dashId = createDashManifestDefault("manifest.mpd",
+            encodingId, dashOut);
+    logger.info("manifest id: " + dashId);
+
+    LiveDashManifest liveDashManifestId = createLiveDashManifest(
+            dashId, 90D, 300D);
+
+    EncodingOutput hlsOut = createEncodingOutput(gcsOutId, rootPath);
+    logger.info("manifest output: " + hlsOut);
+
+    String hlsId = createHlsManifestDefault(
+            "manifest.m3u8", encodingId, hlsOut);
+    logger.info("manifest id: " + dashId);
+
+    LiveHlsManifest liveHlsManifestId = createLiveHlsManifest(
+            hlsId, 90D);
+
+
+    // --------- initialize encoding, generate manifest files---------------
+    //-----------------------------------------
+
+    startEncoding(encodingId, liveDashManifestId, liveHlsManifestId,
+            config.getProperty("live_key"));
 
     //#endmain
   }
@@ -154,19 +182,22 @@ private static final java.util.logging.Logger logger =
   }
 
   private static String getRtmpInputId()
-          throws BitmovinException {
+          throws BitmovinException
+  {
     return bitmovinApi.encoding.inputs.rtmp.list().getItems().get(0).getId();
   }
 
-  private static BitmovinApi createBitmovinApi(String key) {
+  private static BitmovinApi createBitmovinApi(String key)
+  {
     return BitmovinApi.builder()
             .withApiKey(key)
             .withLogger(new Slf4jLogger(), Logger.Level.BASIC)
             .build();
   }
 
-  private static GcsOutput createGcsOutput(String name, String access, String secret,
-                                           String bucketName) {
+  private static GcsOutput createGcsOutput(String name, String access,
+                                           String secret, String bucketName)
+  {
     GcsOutput output = new GcsOutput();
     output.setName(name);
     output.setAccessKey(access);
@@ -176,7 +207,8 @@ private static final java.util.logging.Logger logger =
     return bitmovinApi.encoding.outputs.gcs.create(output);
   }
 
-  private static String createEncoding(String name) {
+  private static String createEncoding(String name)
+  {
     Encoding encoding = new Encoding();
     encoding.setName(name);
     encoding.setCloudRegion(CloudRegion.AUTO);
@@ -185,7 +217,8 @@ private static final java.util.logging.Logger logger =
 
   //#codecconfig
   private static String createH264Configuration(
-          String name, int height, long bitrate) {
+          String name, int height, long bitrate)
+  {
     H264VideoConfiguration configuration = new H264VideoConfiguration();
     configuration.setName(name);
     configuration.setHeight(height);
@@ -198,16 +231,16 @@ private static final java.util.logging.Logger logger =
   }
 
   private static String createAacConfiguration(
-          String name, long bitrate) {
+          String name, long bitrate)
+  {
     AacAudioConfiguration audioCodecConfiguration = new AacAudioConfiguration();
     audioCodecConfiguration.setName(name);
     audioCodecConfiguration.setBitrate(bitrate);
-
     return bitmovinApi.encoding.configurations
             .audio.aac.create(audioCodecConfiguration).getId();
   }
 
-  private static StreamInput createStreamInput(String path, String resourceId)
+  private static StreamInput createStreamRtmpInput(String resourceId)
   {
     StreamInput streamInput = new StreamInput();
     streamInput.setSelectionMode(StreamSelectionMode.AUTO);
@@ -218,16 +251,6 @@ private static final java.util.logging.Logger logger =
   }
 
   //#streamcreate
-  private static String createAacStream(String encodingId,
-                                        StreamInput streamInput,
-                                        String configId) {
-    Stream stream = new Stream();
-    stream.setCodecConfigId(configId);
-    stream.addInputStreamsItem(streamInput);
-    stream = bitmovinApi.encoding.encodings.streams.create(encodingId, stream);
-
-    return stream.getId();
-  }
 
   private static String createH264Stream(String encodingId,
                                          StreamInput streamInput,
@@ -238,6 +261,18 @@ private static final java.util.logging.Logger logger =
     stream.addInputStreamsItem(streamInput);
     return bitmovinApi.encoding.encodings
             .streams.create(encodingId, stream).getId();
+  }
+
+  private static String createAacStream(String encodingId,
+                                        StreamInput streamInput,
+                                        String configId)
+  {
+    Stream stream = new Stream();
+    stream.setCodecConfigId(configId);
+    stream.addInputStreamsItem(streamInput);
+    stream = bitmovinApi.encoding.encodings.streams.create(encodingId, stream);
+
+    return stream.getId();
   }
 
   private enum createEncodingOutputVariableParameterIndex
@@ -291,11 +326,12 @@ private static final java.util.logging.Logger logger =
   //#encoding-start
   private static void startEncoding(String encodingId,
                                     LiveDashManifest dashManifest,
-                                    /*LiveHlsManifest hlsManifest,*/
+                                    LiveHlsManifest hlsManifest,
                                     String liveKey)
   {
     StartLiveEncodingRequest encodingIni = new StartLiveEncodingRequest();
     encodingIni.addDashManifestsItem(dashManifest);
+    encodingIni.addHlsManifestsItem(hlsManifest);
     encodingIni.setStreamKey(liveKey);
 //    encodingIni.addHlsManifestsItem(hlsManifest);
     bitmovinApi.encoding.encodings.live.start(encodingId, encodingIni);
@@ -331,21 +367,44 @@ private static final java.util.logging.Logger logger =
     manifest.setEncodingId(encodingId);
     manifest.setManifestName(name);
     manifest.setVersion(DashManifestDefaultVersion.V1);
-    manifest = bitmovinApi.encoding.manifests.dash.defaultapi.create(manifest);
-    bitmovinApi.encoding.manifests.dash.start(manifest.getId());
-    return manifest.getId();
+    return bitmovinApi.encoding.manifests.dash.defaultapi.create(manifest)
+            .getId();
+//    bitmovinApi.encoding.manifests.dash.start(manifest.getId());
+//    return manifest.getId();
   }
 
   private static LiveDashManifest createLiveDashManifest(String manifestId,
-                                               double offset,
-                                               double timeshift)
+                                                         double offset,
+                                                         double timeshift)
   {
-      LiveDashManifest manifestConfig = new LiveDashManifest();
-      manifestConfig.setManifestId(manifestId);
-      manifestConfig.setTimeshift(timeshift);
-      manifestConfig.setLiveEdgeOffset(offset);
-      return manifestConfig;
+    LiveDashManifest manifestConfig = new LiveDashManifest();
+    manifestConfig.setManifestId(manifestId);
+    manifestConfig.setTimeshift(timeshift);
+    manifestConfig.setLiveEdgeOffset(offset);
+    return manifestConfig;
   }
   //#endclass
+
+  private static String createHlsManifestDefault(
+          String name, String encodingId, EncodingOutput out)
+  {
+    HlsManifestDefault manifest = new HlsManifestDefault();
+    manifest.setEncodingId(encodingId);
+    manifest.addOutputsItem(out);
+    manifest.setName(name);
+    manifest.setVersion(HlsManifestDefaultVersion.V1);
+    return bitmovinApi.encoding.manifests
+          .hls.defaultapi.create(manifest).getId();
+  }
+
+  private static LiveHlsManifest createLiveHlsManifest(String manifestId,
+                                                         double timeshift)
+  {
+    LiveHlsManifest manifestConfig = new LiveHlsManifest();
+    manifestConfig.setManifestId(manifestId);
+    manifestConfig.setTimeshift(timeshift);
+    return manifestConfig;
+  }
+
 }
 
