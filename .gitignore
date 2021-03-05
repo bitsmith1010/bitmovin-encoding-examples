@@ -1,5 +1,7 @@
 target
 encode-p1.iml
+*0
+*.swp
 application_private.properties
 /src/main/resources/META-INF/application_private.properties
 .idea

@@ -38,6 +38,7 @@ import java.util.Date;
 import java.util.Properties;
 
 public class LiveEncoding {
+
   private static final java.util.logging.Logger logger =
           java.util.logging.Logger.getLogger(LiveEncoding.class.getName());
 
@@ -81,12 +82,24 @@ public class LiveEncoding {
                     );
     logger.info("video config id: " + h264ConfigurationId);
 
+    String h264Configuration2Id =
+            ! config.getProperty("h264_config_2_id").equals("") ?
+                    config.getProperty("h264_config_2_id") :
+                    createH264Configuration(
+                            "h264-2",
+                            Integer.parseInt(config.getProperty("h264_2_height")),
+                            Long.parseLong(config.getProperty("h264_2_bitrate"))
+                    );
+    logger.info("video config id: " + h264Configuration2Id);
+
     String aacConfigurationId =
             ! config.getProperty("aac_config_1_id").equals("") ?
                     config.getProperty("aac_config_1_id") :
                     createAacConfiguration(
                             "aac-1",
-                            Long.parseLong(config.getProperty("aac_1_bitrate"))
+                            Long.parseLong(config.getProperty("aac_1_bitrate")),
+                            Double.parseDouble(config.getProperty(
+                                    "aac_1_sample_rate"))
                     );
     logger.info("audio config id: " + aacConfigurationId);
 
@@ -94,19 +107,17 @@ public class LiveEncoding {
     // --------- streams ----------------
     //-----------------------------------------
 
-    StreamInput h264StreamInput = createStreamRtmpInput(inRtmpId);
-    logger.info("input to video stream: " + h264StreamInput);
-
-    StreamInput aacStreamInput = createStreamRtmpInput(inRtmpId);
-    logger.info("input to audio stream: " + aacStreamInput);
-
-    String h264StreamId = createH264Stream(encodingId, h264StreamInput,
-            h264ConfigurationId);
+    String h264StreamId = createH264Stream(encodingId,
+            h264ConfigurationId, inRtmpId);
     logger.info("video stream id: " + h264StreamId);
 
-//    String aacStreamId = createAacStream(encodingId, aacStreamInput,
-//            aacConfigurationId);
-//    logger.info("audio stream id: " + aacStreamId);
+    String h264Stream2Id = createH264Stream(encodingId,
+            h264Configuration2Id, inRtmpId);
+    logger.info("video stream id: " + h264StreamId);
+
+    String aacStreamId = createAacStream(encodingId,
+            aacConfigurationId, inRtmpId);
+    logger.info("audio stream id: " + aacStreamId);
 
 
     // --------- muxings ----------------
@@ -122,6 +133,12 @@ public class LiveEncoding {
                     config.getProperty("h264_1_bitrate"), "fmp4");
     logger.info("fmp4 h264 output: " + fmp4H264Out);
 
+    EncodingOutput fmp4H264Out2 = createEncodingOutput(
+            gcsOutId, rootPath, "h264",
+            config.getProperty("h264_2_height") + "_" +
+                    config.getProperty("h264_2_bitrate"), "fmp4");
+    logger.info("fmp4 h264 output 2: " + fmp4H264Out);
+
     EncodingOutput fmp4AacOut = createEncodingOutput(
             gcsOutId, rootPath, "aac",
             config.getProperty("aac_1_bitrate"), "fmp4");
@@ -129,7 +146,9 @@ public class LiveEncoding {
 
     createFmp4Muxing(encodingId, fmp4H264Out, h264StreamId);
 
-//    createFmp4Muxing(encodingId, fmp4AacOut, aacStreamId);
+    createFmp4Muxing(encodingId, fmp4H264Out2, h264Stream2Id);
+
+    createFmp4Muxing(encodingId, fmp4AacOut, aacStreamId);
 
 
     // --------- manifests ----------------
@@ -222,7 +241,7 @@ public class LiveEncoding {
     H264VideoConfiguration configuration = new H264VideoConfiguration();
     configuration.setName(name);
     configuration.setHeight(height);
-    configuration.setWidth(640);
+    configuration.setWidth( (int)(Math.ceil(height * 16/9.0)) );
     configuration.setBitrate(bitrate);
     configuration.setPresetConfiguration(PresetConfiguration.LIVE_STANDARD);
 
@@ -231,11 +250,12 @@ public class LiveEncoding {
   }
 
   private static String createAacConfiguration(
-          String name, long bitrate)
+          String name, long bitrate, double sampleRate)
   {
     AacAudioConfiguration audioCodecConfiguration = new AacAudioConfiguration();
     audioCodecConfiguration.setName(name);
     audioCodecConfiguration.setBitrate(bitrate);
+    audioCodecConfiguration.setRate(sampleRate);
     return bitmovinApi.encoding.configurations
             .audio.aac.create(audioCodecConfiguration).getId();
   }
@@ -253,23 +273,26 @@ public class LiveEncoding {
   //#streamcreate
 
   private static String createH264Stream(String encodingId,
-                                         StreamInput streamInput,
-                                         String configurationId)
+                                         String configurationId,
+                                         String input)
   {
+    StreamInput inputToStream = createStreamRtmpInput(input);
     Stream stream = new Stream();
+
     stream.setCodecConfigId(configurationId);
-    stream.addInputStreamsItem(streamInput);
+    stream.addInputStreamsItem(inputToStream);
     return bitmovinApi.encoding.encodings
             .streams.create(encodingId, stream).getId();
   }
 
   private static String createAacStream(String encodingId,
-                                        StreamInput streamInput,
-                                        String configId)
+                                        String configId, String input)
   {
+    StreamInput inputToStream = createStreamRtmpInput(input);
     Stream stream = new Stream();
+
     stream.setCodecConfigId(configId);
-    stream.addInputStreamsItem(streamInput);
+    stream.addInputStreamsItem(inputToStream);
     stream = bitmovinApi.encoding.encodings.streams.create(encodingId, stream);
 
     return stream.getId();
