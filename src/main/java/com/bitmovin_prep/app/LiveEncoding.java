@@ -8,6 +8,12 @@ import com.bitmovin.api.sdk.common.BitmovinException;
 import com.bitmovin.api.sdk.model.AacAudioConfiguration;
 import com.bitmovin.api.sdk.model.AclEntry;
 import com.bitmovin.api.sdk.model.AclPermission;
+import com.bitmovin.api.sdk.model.AudioMixChannelType;
+import com.bitmovin.api.sdk.model.AudioMixInputChannelLayout;
+import com.bitmovin.api.sdk.model.AudioMixInputStream;
+import com.bitmovin.api.sdk.model.AudioMixInputStreamChannel;
+import com.bitmovin.api.sdk.model.AudioMixInputStreamSourceChannel;
+import com.bitmovin.api.sdk.model.AudioMixSourceChannelType;
 import com.bitmovin.api.sdk.model.CloudRegion;
 import com.bitmovin.api.sdk.model.DashManifestDefault;
 import com.bitmovin.api.sdk.model.DashManifestDefaultVersion;
@@ -18,6 +24,8 @@ import com.bitmovin.api.sdk.model.GcsOutput;
 import com.bitmovin.api.sdk.model.H264VideoConfiguration;
 import com.bitmovin.api.sdk.model.HlsManifestDefault;
 import com.bitmovin.api.sdk.model.HlsManifestDefaultVersion;
+import com.bitmovin.api.sdk.model.IngestInputStream;
+import com.bitmovin.api.sdk.model.Input;
 import com.bitmovin.api.sdk.model.LiveDashManifest;
 import com.bitmovin.api.sdk.model.LiveHlsManifest;
 import com.bitmovin.api.sdk.model.MuxingStream;
@@ -34,7 +42,9 @@ import feign.slf4j.Slf4jLogger;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Properties;
 
 public class LiveEncoding {
@@ -108,15 +118,18 @@ public class LiveEncoding {
     //-----------------------------------------
 
     String h264StreamId = createH264Stream(encodingId,
-            h264ConfigurationId, inRtmpId);
+            h264ConfigurationId, inRtmpId,
+            Integer.parseInt(config.getProperty("video_source_track_index")));
     logger.info("video stream id: " + h264StreamId);
 
     String h264Stream2Id = createH264Stream(encodingId,
-            h264Configuration2Id, inRtmpId);
+            h264Configuration2Id, inRtmpId,
+            Integer.parseInt(config.getProperty("video_source_track_index")));
     logger.info("video stream id: " + h264StreamId);
 
     String aacStreamId = createAacStream(encodingId,
-            aacConfigurationId, inRtmpId);
+            aacConfigurationId, inRtmpId,
+            Integer.parseInt(config.getProperty("audio_source_track_index")));
     logger.info("audio stream id: " + aacStreamId);
 
 
@@ -260,12 +273,13 @@ public class LiveEncoding {
             .audio.aac.create(audioCodecConfiguration).getId();
   }
 
-  private static StreamInput createStreamRtmpInput(String resourceId)
+  private static StreamInput createStreamRtmpInput(String resourceId,
+                                                   int trackIndex)
   {
     StreamInput streamInput = new StreamInput();
     streamInput.setSelectionMode(StreamSelectionMode.AUTO);
     streamInput.setInputPath("live");
-    streamInput.setPosition(0);
+    streamInput.setPosition(trackIndex);
     streamInput.setInputId(resourceId);
     return streamInput;
   }
@@ -274,9 +288,10 @@ public class LiveEncoding {
 
   private static String createH264Stream(String encodingId,
                                          String configurationId,
-                                         String input)
+                                         String input,
+                                         int trackIndex)
   {
-    StreamInput inputToStream = createStreamRtmpInput(input);
+    StreamInput inputToStream = createStreamRtmpInput(input, trackIndex);
     Stream stream = new Stream();
 
     stream.setCodecConfigId(configurationId);
@@ -285,10 +300,13 @@ public class LiveEncoding {
             .streams.create(encodingId, stream).getId();
   }
 
+
+
   private static String createAacStream(String encodingId,
-                                        String configId, String input)
+                                        String configId, String input,
+                                        int trackIndex)
   {
-    StreamInput inputToStream = createStreamRtmpInput(input);
+    StreamInput inputToStream = createStreamRtmpInput(input, trackIndex);
     Stream stream = new Stream();
 
     stream.setCodecConfigId(configId);
@@ -428,6 +446,5 @@ public class LiveEncoding {
     manifestConfig.setTimeshift(timeshift);
     return manifestConfig;
   }
-
 }
 
