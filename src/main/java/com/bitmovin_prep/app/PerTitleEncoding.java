@@ -3,13 +3,14 @@
 //
 package com.bitmovin_prep.app;
 
-import com.bitmovin.api.sdk.BitmovinApi;
 import com.bitmovin.api.sdk.model.AclEntry;
 import com.bitmovin.api.sdk.model.AclPermission;
 import com.bitmovin.api.sdk.model.AutoRepresentation;
 import com.bitmovin.api.sdk.model.EncodingOutput;
 import com.bitmovin.api.sdk.model.H264PerTitleConfiguration;
 import com.bitmovin.api.sdk.model.H264VideoConfiguration;
+import com.bitmovin.api.sdk.model.H265PerTitleConfiguration;
+import com.bitmovin.api.sdk.model.H265VideoConfiguration;
 import com.bitmovin.api.sdk.model.PerTitle;
 import com.bitmovin.api.sdk.model.PresetConfiguration;
 import com.bitmovin.api.sdk.model.StartEncodingRequest;
@@ -22,6 +23,17 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
+
+/*
+  OVERWRITTEN:
+    execute(), createH264Configuration(), createH265Configuration(),
+    createEncodingOutput(), startEncoding()
+  NEW METHODS: createPerTitleH265(), createPerTitleH264(),
+      createStreamForPerTitle()
+
+  CHANGE CODEC:
+    switch codec specific methods in exec() and startEncoding()
+ */
 
 public class PerTitleEncoding extends BasicEncodingClient {
 
@@ -52,13 +64,13 @@ public class PerTitleEncoding extends BasicEncodingClient {
                     .getId();
     logger.info("out id: " + gcsOutId);
 
-    String h264ConfigurationId =
-            ! config.getProperty("h264_config_1_id").equals("") ?
-                    config.getProperty("h264_config_1_id") :
-            createH264ConfigForPerTitle(
-            "h264-1",
-            Integer.parseInt(config.getProperty("h264_1_width")));
-    logger.info("video config id: " + h264ConfigurationId);
+    String h265ConfigurationId =
+            ! config.getProperty("h265_config_1_id").equals("") ?
+                    config.getProperty("h265_config_1_id") :
+            createH265Configuration(
+            "h265-1",
+            Integer.parseInt(config.getProperty("h265_1_width")));
+    logger.info("video config id: " + h265ConfigurationId);
 
     String aacConfigurationId =
             ! config.getProperty("aac_config_1_id").equals("") ?
@@ -81,41 +93,41 @@ public class PerTitleEncoding extends BasicEncodingClient {
       encodingId = createEncoding("encoding-per-title");
       logger.info("encoding id: " + encodingId);
 
-      StreamInput h264StreamInput = createStreamInput(
-              config.getProperty("input_path"), gcsInId);
-      logger.info("input to video stream: " + h264StreamInput.getInputId());
+      StreamInput h265StreamInput = createStreamInput(
+              config.getProperty("video_input_path"), gcsInId);
+      logger.info("input to video stream: " + h265StreamInput.getInputId());
 
       StreamInput aacStreamInput = createStreamInput(
-              config.getProperty("input_path"), gcsInId);
+              config.getProperty("audio_input_path"), gcsInId);
       logger.info("input to audio stream: " + aacStreamInput.getInputId());
 
       String aacStreamId = createStream(encodingId,
               aacConfigurationId, aacStreamInput);
       logger.info("audio stream id: " + aacStreamId);
 
-      String h264StreamId = createH264StreamForPerTitle(encodingId,
-              h264ConfigurationId, h264StreamInput);
-      logger.info("video stream id: " + h264StreamId);
+      String h265StreamId = createStreamForPerTitle(encodingId,
+              h265ConfigurationId, h265StreamInput);
+      logger.info("video stream id: " + h265StreamId);
 
-      EncodingOutput fmp4H264Out = createOutputForPerTitle(
+      EncodingOutput fmp4H265Out = createEncodingOutput(
               gcsOutId, rootPath,
-              "h264", "{width}_{bitrate}_{uuid}", "fmp4");
-      logger.info("fmp4 h264 output: " + fmp4H264Out);
+              "h265", "{width}_{bitrate}_{uuid}", "fmp4");
+      logger.info("fmp4 h265 output: " + fmp4H265Out);
 
-      EncodingOutput fmp4AacOut = createOutputForPerTitle(
+      EncodingOutput fmp4AacOut = createEncodingOutput(
               gcsOutId, rootPath, "aac", "16000", "fmp4");
       logger.info("fmp4 aac output: " + fmp4AacOut);
 
-      createFmp4Muxing(encodingId, fmp4H264Out, h264StreamId);
+      createFmp4Muxing(encodingId, fmp4H265Out, h265StreamId);
 
       createFmp4Muxing(encodingId, fmp4AacOut, aacStreamId);
 
-      startPerTitleEncoding(encodingId);
+      startEncoding(encodingId);
       awaitEncoding(encodingId);
     }
     logger.info("encoding id: " + encodingId);
 
-    EncodingOutput manifestOut = createOutputForPerTitle(gcsOutId, rootPath);
+    EncodingOutput manifestOut = createEncodingOutput(gcsOutId, rootPath);
     String manifestId = createDashManifestDefault(
             "manifest.mpd", encodingId, manifestOut);
     bitmovinApi.encoding.manifests.dash.start(manifestId);
@@ -126,7 +138,7 @@ public class PerTitleEncoding extends BasicEncodingClient {
   }
 
   // differs from basic setup: bitrate not set
-  private static String createH264ConfigForPerTitle(
+  public String createH264Configuration(
           String name, int width)
   {
     H264VideoConfiguration configuration = new H264VideoConfiguration();
@@ -140,8 +152,19 @@ public class PerTitleEncoding extends BasicEncodingClient {
             .configurations.video.h264.create(configuration).getId();
   }
 
+  public String createH265Configuration(
+    String name, int width)
+  {
+    H265VideoConfiguration configuration = new H265VideoConfiguration();
+    configuration.setName(name);
+    configuration.setWidth(width);
+    configuration.setPresetConfiguration(PresetConfiguration.VOD_STANDARD);
+    return bitmovinApi.encoding
+      .configurations.video.h265.create(configuration).getId();
+  }
+
   // differs to basic encoding: mode attr = StreamMode.PER_TITLE_TEMPLATE
-  private static String createH264StreamForPerTitle(
+  public String createStreamForPerTitle(
           String encodingId, String configurationId,
           StreamInput streamInput)
   {
@@ -154,9 +177,9 @@ public class PerTitleEncoding extends BasicEncodingClient {
 
   // note: this is identical to the default constructor
   //        save the enum: "RENDITION" changed to "PER_TITLE_TEMPLATE"
-  private enum createOutputForPerTitleVariableParameterIndex
+  public enum createEncodingOutputVariableParameterIndex
     {CODEC, PER_TITLE_TEMPLATE, CONTAINER_FORMAT}
-  private static EncodingOutput createOutputForPerTitle(
+  public EncodingOutput createEncodingOutput(
           String resourceId, String rootPath, String... pathComponents)
   {
     AclEntry aclEntry = new AclEntry();
@@ -170,12 +193,12 @@ public class PerTitleEncoding extends BasicEncodingClient {
     if( pathComponents.length > 0 )
       out.setOutputPath(Paths.get(
               rootPath,
-              pathComponents[createOutputForPerTitleVariableParameterIndex
+              pathComponents[createEncodingOutputVariableParameterIndex
                               .CODEC.ordinal()] +
                       "_" +
-                      pathComponents[createOutputForPerTitleVariableParameterIndex
+                      pathComponents[createEncodingOutputVariableParameterIndex
                                       .PER_TITLE_TEMPLATE.ordinal()],
-              pathComponents[createOutputForPerTitleVariableParameterIndex
+              pathComponents[createEncodingOutputVariableParameterIndex
                       .CONTAINER_FORMAT.ordinal()]
       ).toString());
     else out.setOutputPath( rootPath );
@@ -183,7 +206,7 @@ public class PerTitleEncoding extends BasicEncodingClient {
     return out;
   }
 
-  private static PerTitle createPerTitle()
+  public PerTitle createPerTitleH264()
   {
     AutoRepresentation autoRepresentation = new AutoRepresentation();
 
@@ -197,12 +220,25 @@ public class PerTitleEncoding extends BasicEncodingClient {
     return perTitle;
   }
 
-    //#encoding-start
-  private static void startPerTitleEncoding(String encodingId)
+  public PerTitle createPerTitleH265()
+  {
+    AutoRepresentation autoRepresentation = new AutoRepresentation();
+
+    H265PerTitleConfiguration h265PerTitleConfiguration =
+      new H265PerTitleConfiguration();
+    h265PerTitleConfiguration.setAutoRepresentations(autoRepresentation);
+
+    PerTitle perTitle = new PerTitle();
+    perTitle.setH265Configuration(h265PerTitleConfiguration);
+
+    return perTitle;
+  }
+
+  public void startEncoding(String encodingId)
   {
 
     StartEncodingRequest startEncodingRequest = new StartEncodingRequest();
-    startEncodingRequest.setPerTitle(createPerTitle());
+    startEncodingRequest.setPerTitle(createPerTitleH265());
 
     // this is suggested in the guide and example. Here an error resulted.
     // startEncodingRequest.setEncodingMode(EncodingMode.SINGLE_PASS);
