@@ -32,7 +32,8 @@ public class EncodingClientUtilities {
         return config;
     }
 
-    // rootPath format: domain/bucket_name/encoding_tests/myprobe/DATE
+    // rootPath format: OUTPUT_PATH/DATE
+    //   complete url: domain/bucket_name/OUTPUT_PATH/DATE
     public String createRootPath(Properties config) {
         return Paths.get(config.getProperty("output_path"),
                 new Date().toString().replace(" ", "_"))

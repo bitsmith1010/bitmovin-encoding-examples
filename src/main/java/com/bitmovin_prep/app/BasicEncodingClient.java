@@ -5,6 +5,7 @@ import com.bitmovin.api.sdk.model.AacAudioConfiguration;
 import com.bitmovin.api.sdk.model.GcsInput;
 import com.bitmovin.api.sdk.model.HlsManifestDefault;
 import com.bitmovin.api.sdk.model.HlsManifestDefaultVersion;
+import com.bitmovin.api.sdk.model.S3Output;
 import com.bitmovin.api.sdk.model.StartEncodingRequest;
 import com.bitmovin.api.sdk.model.StreamInput;
 import com.bitmovin.api.sdk.model.StreamSelectionMode;
@@ -30,8 +31,7 @@ import feign.slf4j.Slf4jLogger;
 
 public class BasicEncodingClient extends EncodingClientUtilities {
 
-    public void execute() throws IOException, InterruptedException
-    {
+    public void execute() throws IOException, InterruptedException {
 
         Properties config = getProperties();
         logger.info("cofiguration file: " + config.toString());
@@ -40,23 +40,39 @@ public class BasicEncodingClient extends EncodingClientUtilities {
         logger.info("created an instance of bitmovin api " +
           bitmovinApi.toString());
 
-        String gcsInId = !config.getProperty("input_resource_id").equals("") ?
+        String out1Id = "";
+        String out1Type = config.getProperty("out_1_type");
+        switch (out1Type) {
+            case "S3":
+                out1Id = !config.getProperty("out_1_id").equals("") ?
+                  config.getProperty("out_1_id") :
+                  createOutS3("out_aws_1",
+                    config.getProperty("aws_out_1_access"),
+                    config.getProperty("aws_out_1_secret"),
+                    config.getProperty("aws_out_1_bucket_name"))
+                    .getId();
+                logger.info("in id: " + out1Id);
+                break;
+            case "GCP":
+                out1Id = !config.getProperty("output_resource_id").equals("") ?
+                  config.getProperty("output_resource_id") :
+                  createGcsOutput("resource-out-1",
+                    config.getProperty("gcs_output_access"),
+                    config.getProperty("gcs_output_secret"),
+                    config.getProperty("output_bucket_name"))
+                    .getId();
+                logger.info("out id: " + out1Id);
+                break;
+        }
+
+        String in1Id = !config.getProperty("input_resource_id").equals("") ?
           config.getProperty("input_resource_id") :
           createGcsInput("resource-in-1",
             config.getProperty("gcs_input_access"),
             config.getProperty("gcs_input_secret"),
             config.getProperty("input_bucket_name"))
             .getId();
-        logger.info("in id: " + gcsInId);
-
-        String gcsOutId = !config.getProperty("output_resource_id").equals("") ?
-          config.getProperty("output_resource_id") :
-          createGcsOutput("resource-out-1",
-            config.getProperty("gcs_output_access"),
-            config.getProperty("gcs_output_secret"),
-            config.getProperty("output_bucket_name"))
-            .getId();
-        logger.info("out id: " + gcsOutId);
+        logger.info("in id: " + in1Id);
 
         String h264ConfigurationId =
           !config.getProperty("h264_config_1_id").equals("") ?
@@ -90,11 +106,11 @@ public class BasicEncodingClient extends EncodingClientUtilities {
             logger.info("encoding id: " + encodingId);
 
             StreamInput h264StreamInput = createStreamInput(
-              config.getProperty("video_input_path"), gcsInId);
+              config.getProperty("video_input_path"), in1Id);
             logger.info("input to video stream: " + h264StreamInput.getInputId());
 
             StreamInput aacStreamInput = createStreamInput(
-              config.getProperty("audio_input_path"), gcsInId);
+              config.getProperty("audio_input_path"), in1Id);
             logger.info("input to audio stream: " + aacStreamInput.getInputId());
 
             String aacStreamId = createStream(encodingId,
@@ -105,13 +121,17 @@ public class BasicEncodingClient extends EncodingClientUtilities {
               h264ConfigurationId, h264StreamInput);
             logger.info("video stream id: " + h264StreamId);
 
+            //CODEC, RENDITION, CONTAINER_FORMAT
             EncodingOutput fmp4H264Out = createEncodingOutput(
-              gcsOutId, rootPath,
-              "h264", "{width}_{bitrate}_{uuid}", "fmp4");
+              out1Id, rootPath,
+              "h264",
+              config.getProperty("h264_1_height") + "_" +
+                config.getProperty("h264_1_bitrate"),
+              "fmp4");
             logger.info("fmp4 h264 output: " + fmp4H264Out);
 
             EncodingOutput fmp4AacOut = createEncodingOutput(
-              gcsOutId, rootPath, "aac", "16000", "fmp4");
+              out1Id, rootPath, "aac", "16000", "fmp4");
             logger.info("fmp4 aac output: " + fmp4AacOut);
 
             createFmp4Muxing(encodingId, fmp4H264Out, h264StreamId);
@@ -123,12 +143,23 @@ public class BasicEncodingClient extends EncodingClientUtilities {
         }
         logger.info("encoding id: " + encodingId);
 
-        EncodingOutput manifestOut = createEncodingOutput(gcsOutId, rootPath);
-        String manifestId = createDashManifestDefault(
-          "manifest.mpd", encodingId, manifestOut);
-        bitmovinApi.encoding.manifests.dash.start(manifestId);
-        logger.info("manifest id: " + manifestId);
+        EncodingOutput manifestOut = createEncodingOutput(out1Id, rootPath);
 
+        String manifestId = "";
+        switch (config.getProperty("manifest_type")) {
+            case "hls":
+                manifestId = createHlsManifestDefault(
+                  "manifest.m3u8", encodingId, manifestOut);
+                bitmovinApi.encoding.manifests.hls.start(manifestId);
+                logger.info("manifest id: " + manifestId);
+                break;
+            case "dash":
+                manifestId = createDashManifestDefault(
+                  "manifest.mpd", encodingId, manifestOut);
+                bitmovinApi.encoding.manifests.dash.start(manifestId);
+                logger.info("manifest id: " + manifestId);
+                break;
+        }
     }
     //#endmain
 
@@ -162,6 +193,18 @@ public class BasicEncodingClient extends EncodingClientUtilities {
         output.setBucketName(bucketName);
 
         return bitmovinApi.encoding.outputs.gcs.create(output);
+    }
+
+    public S3Output createOutS3(String name, String access,
+                                    String secret, String bucketName)
+    {
+        S3Output output = new S3Output();
+        output.setName(name);
+        output.setAccessKey(access);
+        output.setSecretKey(secret);
+        output.setBucketName(bucketName);
+
+        return bitmovinApi.encoding.outputs.s3.create(output);
     }
 
     public String createEncoding(String name)
