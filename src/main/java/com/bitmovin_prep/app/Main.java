@@ -6,9 +6,12 @@ public class Main {
         {
             //PerTitleEncoding perTitleEncoding = new PerTitleEncoding();
             //perTitleEncoding.execute();
-            BasicEncodingClient basicEncodingClient = new BasicEncodingClient();
-            basicEncodingClient.execute();
-            //AutoTest test1 = new AutoTest();
+            //BasicEncodingClient basicEncodingClient = new BasicEncodingClient();
+            //basicEncodingClient.execute();
+          FiltersAndThumbnails filtersEncodingClient = new FiltersAndThumbnails();
+          filtersEncodingClient.execute();
+
+          //AutoTest test1 = new AutoTest();
             //test1.runTest();
         }
 }
