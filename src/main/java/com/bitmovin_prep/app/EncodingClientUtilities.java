@@ -12,7 +12,7 @@ import java.util.Properties;
 public class EncodingClientUtilities {
 
     public static final java.util.logging.Logger logger =
-            java.util.logging.Logger.getLogger(PerTitleEncoding.class.getName());
+      java.util.logging.Logger.getLogger(EncodingClientUtilities.class.getName());
 
     public static BitmovinApi bitmovinApi;
 

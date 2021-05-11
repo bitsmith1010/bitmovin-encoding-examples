@@ -29,9 +29,10 @@ import java.util.Properties;
 import feign.Logger;
 import feign.slf4j.Slf4jLogger;
 
+
 public class BasicEncodingClient extends EncodingClientUtilities {
 
-    public void execute() throws IOException, InterruptedException {
+    public void execute() throws IOException, InterruptedException, Exception {
 
         Properties config = getProperties();
         logger.info("cofiguration file: " + config.toString());
@@ -107,11 +108,11 @@ public class BasicEncodingClient extends EncodingClientUtilities {
 
             StreamInput h264StreamInput = createStreamInput(
               config.getProperty("video_input_path"), in1Id);
-            logger.info("input to video stream: " + h264StreamInput.getInputId());
+            logger.info("input to video stream: " + h264StreamInput);
 
             StreamInput aacStreamInput = createStreamInput(
               config.getProperty("audio_input_path"), in1Id);
-            logger.info("input to audio stream: " + aacStreamInput.getInputId());
+            logger.info("input to audio stream: " + aacStreamInput);
 
             String aacStreamId = createStream(encodingId,
               aacConfigurationId, aacStreamInput);
@@ -167,7 +168,7 @@ public class BasicEncodingClient extends EncodingClientUtilities {
     {
         return BitmovinApi.builder()
           .withApiKey(key)
-          .withLogger(new Slf4jLogger(), Logger.Level.BASIC)
+          .withLogger(new Slf4jLogger(), feign.Logger.Level.FULL)
           .build();
     }
 
