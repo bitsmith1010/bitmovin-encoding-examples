@@ -22,7 +22,7 @@
     <dependency>
       <groupId>com.bitmovin.api.sdk</groupId>
       <artifactId>bitmovin-api-sdk</artifactId>
-      <version>1.69.0</version>
+      <version>1.71.0</version>
       <scope>compile</scope>
     </dependency>
     <dependency>

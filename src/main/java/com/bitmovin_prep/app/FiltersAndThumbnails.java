@@ -40,6 +40,9 @@ import feign.slf4j.Slf4jLogger;
 
 public class FiltersAndThumbnails extends BasicEncodingClient {
 
+    public FiltersAndThumbnails() throws IOException {
+    }
+
     public void execute() throws IOException, InterruptedException {
 
         Properties config = getProperties();
@@ -79,8 +82,7 @@ public class FiltersAndThumbnails extends BasicEncodingClient {
           createGcsInput("resource-in-1",
             config.getProperty("gcs_input_access"),
             config.getProperty("gcs_input_secret"),
-            config.getProperty("input_bucket_name"))
-            .getId();
+            config.getProperty("input_bucket_name"));
         logger.info("in id: " + in1Id);
 
         String h264ConfigurationId =

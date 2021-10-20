@@ -12,6 +12,7 @@ import com.bitmovin.api.sdk.model.H264VideoConfiguration;
 import com.bitmovin.api.sdk.model.H265PerTitleConfiguration;
 import com.bitmovin.api.sdk.model.H265VideoConfiguration;
 import com.bitmovin.api.sdk.model.PerTitle;
+import com.bitmovin.api.sdk.model.PerTitleConfiguration;
 import com.bitmovin.api.sdk.model.PresetConfiguration;
 import com.bitmovin.api.sdk.model.StartEncodingRequest;
 import com.bitmovin.api.sdk.model.Stream;
@@ -36,6 +37,9 @@ import java.util.Properties;
 
 public class PerTitleEncoding extends BasicEncodingClient {
 
+  public PerTitleEncoding() throws IOException {
+  }
+
   public void execute() throws IOException, InterruptedException, Exception {
     Properties config = getProperties();
     logger.info("cofiguration file: " + config.toString());
@@ -49,8 +53,7 @@ public class PerTitleEncoding extends BasicEncodingClient {
       createGcsInput("resource-in-1",
         config.getProperty("gcs_input_access"),
         config.getProperty("gcs_input_secret"),
-        config.getProperty("input_bucket_name"))
-        .getId();
+        config.getProperty("input_bucket_name"));
     logger.info("in id: " + gcsInId);
 
     String out1Id = "";
